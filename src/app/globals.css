@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-cream: #f5ead9;
+  --color-cream-soft: #faf3e7;
+  --color-cream-deep: #ecdcc2;
+  --color-gold: #c69e6e;
+  --color-gold-soft: #d4b48a;
+  --color-peach: #e8a88f;
+  --color-peach-soft: #f0c4b0;
+  --color-lavender: #a798c4;
+  --color-lavender-soft: #c8bcdf;
+  --color-lavender-deep: #8673ab;
+  --color-dew: #a8c5d4;
+  --color-ink: #2c2a28;
+  --color-ink-soft: #5a544d;
+  --color-muted: #9a9087;
+
+  --font-display: var(--font-fraunces);
+  --font-sans: var(--font-inter);
+
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+  --radius-xl: 32px;
+
+  --shadow-soft: 0 4px 20px rgba(44, 42, 40, 0.06);
+  --shadow-lift: 0 12px 40px rgba(44, 42, 40, 0.08);
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html,
+  body {
+    background: var(--color-cream-soft);
+    color: var(--color-ink);
+    font-family: var(--font-sans), system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display), serif;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+
+  ::selection {
+    background: var(--color-lavender-soft);
+    color: var(--color-ink);
+  }
+
+  /* Smooth scrolling + no layout shift for scrollbar */
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer components {
+  .container-page {
+    @apply mx-auto w-full max-w-[1280px] px-5 sm:px-8;
+  }
+
+  .btn-primary {
+    background: var(--color-lavender);
+    color: white;
+    transition: all 0.2s ease;
+  }
+  .btn-primary:hover {
+    background: var(--color-lavender-deep);
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+@layer utilities {
+  .bg-grain {
+    background-image: radial-gradient(rgba(44, 42, 40, 0.035) 1px, transparent 1px);
+    background-size: 3px 3px;
+  }
+}
