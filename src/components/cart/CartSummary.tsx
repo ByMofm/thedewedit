@@ -3,14 +3,16 @@ import { siteConfig } from "@/config/site";
 
 interface CartSummaryProps {
   subtotal: number;
+  shippingCost: number | null;
 }
 
-export function CartSummary({ subtotal }: CartSummaryProps) {
+export function CartSummary({ subtotal, shippingCost }: CartSummaryProps) {
   const threshold = siteConfig.payments.freeShippingThreshold;
   const shippingFree = subtotal >= threshold;
   const remaining = Math.max(0, threshold - subtotal);
-  const cash = cashPrice(subtotal);
-  const per = installmentAmount(subtotal, siteConfig.payments.installments);
+  const total = subtotal + (shippingCost ?? 0);
+  const cash = cashPrice(total);
+  const per = installmentAmount(total, siteConfig.payments.installments);
 
   return (
     <div className="space-y-3 py-4">
@@ -23,8 +25,10 @@ export function CartSummary({ subtotal }: CartSummaryProps) {
         <span className="tabular-nums">
           {shippingFree ? (
             <span className="text-lavender-deep">Gratis ✨</span>
+          ) : shippingCost !== null ? (
+            <span className="font-medium">{formatARS(shippingCost)}</span>
           ) : (
-            "Se calcula en checkout"
+            <span className="text-ink-soft text-[12px]">Calculá abajo</span>
           )}
         </span>
       </div>
@@ -40,7 +44,7 @@ export function CartSummary({ subtotal }: CartSummaryProps) {
         <div className="flex items-baseline justify-between">
           <span className="text-[15px] font-medium">Total</span>
           <span className="font-display text-2xl tabular-nums text-ink">
-            {formatARS(subtotal)}
+            {formatARS(total)}
           </span>
         </div>
         <p className="mt-1 text-right text-[12px] text-ink-soft">

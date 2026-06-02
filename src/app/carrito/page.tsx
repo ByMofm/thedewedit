@@ -6,11 +6,27 @@ import { ShoppingBag } from "lucide-react";
 import { CartItem } from "@/components/cart/CartItem";
 import { CartSummary } from "@/components/cart/CartSummary";
 import { CheckoutActions } from "@/components/cart/CheckoutActions";
-import { selectSubtotal, useCart } from "@/lib/store/cart";
+import { ShippingCalculator } from "@/components/cart/ShippingCalculator";
+import { selectShippingCost, selectSubtotal, useCart } from "@/lib/store/cart";
 
 export default function CartPage() {
-  const { items, subtotal } = useCart(
-    useShallow((s) => ({ items: s.items, subtotal: selectSubtotal(s) })),
+  const { items, subtotal, shippingCost, shippingLabel } = useCart(
+    useShallow((s) => {
+      const shippingState = s.shipping;
+      const selectedId =
+        shippingState.status === "success" ? shippingState.selectedId : null;
+      const selectedOption =
+        shippingState.status === "success" && selectedId
+          ? shippingState.result.options.find((o) => o.id === selectedId)
+          : null;
+
+      return {
+        items: s.items,
+        subtotal: selectSubtotal(s),
+        shippingCost: selectShippingCost(s),
+        shippingLabel: selectedOption?.name ?? null,
+      };
+    }),
   );
 
   if (items.length === 0) {
@@ -52,8 +68,14 @@ export default function CartPage() {
 
       <aside className="h-fit rounded-[var(--radius-lg)] bg-white/70 p-6 md:sticky md:top-28">
         <h2 className="font-display text-xl">Resumen</h2>
-        <CartSummary subtotal={subtotal} />
-        <CheckoutActions items={items} subtotal={subtotal} />
+        <ShippingCalculator subtotal={subtotal} />
+        <CartSummary subtotal={subtotal} shippingCost={shippingCost} />
+        <CheckoutActions
+          items={items}
+          subtotal={subtotal}
+          shippingCost={shippingCost}
+          shippingLabel={shippingLabel}
+        />
       </aside>
     </section>
   );

@@ -7,12 +7,16 @@ import { Lock } from "lucide-react";
 import { CartSummary } from "@/components/cart/CartSummary";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { selectSubtotal, useCart } from "@/lib/store/cart";
+import { selectShippingCost, selectSubtotal, useCart } from "@/lib/store/cart";
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { items, subtotal } = useCart(
-    useShallow((s) => ({ items: s.items, subtotal: selectSubtotal(s) })),
+  const { items, subtotal, shippingCost } = useCart(
+    useShallow((s) => ({
+      items: s.items,
+      subtotal: selectSubtotal(s),
+      shippingCost: selectShippingCost(s),
+    })),
   );
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -33,7 +37,7 @@ export default function CheckoutPage() {
       const res = await fetch("/api/mercadopago/preference", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items, payer }),
+        body: JSON.stringify({ items, payer, shippingCost: shippingCost ?? undefined }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "No se pudo crear la preferencia.");
@@ -107,7 +111,7 @@ export default function CheckoutPage() {
             </li>
           ))}
         </ul>
-        <CartSummary subtotal={subtotal} />
+        <CartSummary subtotal={subtotal} shippingCost={shippingCost} />
       </aside>
     </section>
   );

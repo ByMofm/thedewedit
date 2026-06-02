@@ -9,14 +9,16 @@ import { buildOrderMessage, getWhatsAppUrl } from "@/lib/whatsapp";
 interface CheckoutActionsProps {
   items: CartItem[];
   subtotal: number;
+  shippingCost?: number | null;
+  shippingLabel?: string | null;
   onAfterWhatsApp?: () => void;
 }
 
-export function CheckoutActions({ items, subtotal, onAfterWhatsApp }: CheckoutActionsProps) {
+export function CheckoutActions({ items, subtotal, shippingCost, shippingLabel, onAfterWhatsApp }: CheckoutActionsProps) {
   const router = useRouter();
 
   const handleWhatsApp = () => {
-    const message = buildOrderMessage(items, subtotal);
+    const message = buildOrderMessage(items, subtotal, shippingCost, shippingLabel);
     window.open(getWhatsAppUrl(message), "_blank", "noopener");
     onAfterWhatsApp?.();
   };

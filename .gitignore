@@ -7,3 +7,8 @@ out
 .turbo
 *.Zone.Identifier
 memory/
+.vercel
+
+# Generated artifacts
+tsconfig.tsbuildinfo
+data/sheets-export-*.csv

@@ -12,22 +12,37 @@ function getClient() {
   return new MercadoPagoConfig({ accessToken });
 }
 
-export async function createPreference(items: CartItem[], payer: OrderPayer) {
+export async function createPreference(items: CartItem[], payer: OrderPayer, shippingCost?: number) {
   const client = getClient();
   const preference = new Preference(client);
 
   const [firstName, ...rest] = (payer.name ?? "").trim().split(" ");
 
+  const mpItems = [
+    ...items.map((item) => ({
+      id: `${item.productId}${item.variantId ? `::${item.variantId}` : ""}`,
+      title: item.variantName ? `${item.name} (${item.variantName})` : item.name,
+      quantity: item.quantity,
+      unit_price: item.price,
+      currency_id: siteConfig.currency,
+      picture_url: item.image,
+    })),
+    ...(shippingCost && shippingCost > 0
+      ? [
+          {
+            id: "andreani-envio",
+            title: "Envío Andreani",
+            quantity: 1,
+            unit_price: shippingCost,
+            currency_id: siteConfig.currency,
+          },
+        ]
+      : []),
+  ];
+
   const result = await preference.create({
     body: {
-      items: items.map((item) => ({
-        id: `${item.productId}${item.variantId ? `::${item.variantId}` : ""}`,
-        title: item.variantName ? `${item.name} (${item.variantName})` : item.name,
-        quantity: item.quantity,
-        unit_price: item.price,
-        currency_id: siteConfig.currency,
-        picture_url: item.image,
-      })),
+      items: mpItems,
       payer: {
         name: firstName,
         surname: rest.join(" "),

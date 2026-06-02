@@ -4,19 +4,32 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ShoppingBag, X } from "lucide-react";
 import Link from "next/link";
 import { useShallow } from "zustand/react/shallow";
-import { selectSubtotal, useCart } from "@/lib/store/cart";
+import { selectShippingCost, selectSubtotal, useCart } from "@/lib/store/cart";
 import { CartItem } from "./CartItem";
 import { CartSummary } from "./CartSummary";
 import { CheckoutActions } from "./CheckoutActions";
+import { ShippingCalculator } from "./ShippingCalculator";
 
 export function CartDrawer() {
-  const { items, subtotal, isOpen, closeDrawer } = useCart(
-    useShallow((s) => ({
-      items: s.items,
-      subtotal: selectSubtotal(s),
-      isOpen: s.isOpen,
-      closeDrawer: s.closeDrawer,
-    })),
+  const { items, subtotal, shippingCost, shippingLabel, isOpen, closeDrawer } = useCart(
+    useShallow((s) => {
+      const shippingState = s.shipping;
+      const selectedId =
+        shippingState.status === "success" ? shippingState.selectedId : null;
+      const selectedOption =
+        shippingState.status === "success" && selectedId
+          ? shippingState.result.options.find((o) => o.id === selectedId)
+          : null;
+
+      return {
+        items: s.items,
+        subtotal: selectSubtotal(s),
+        shippingCost: selectShippingCost(s),
+        shippingLabel: selectedOption?.name ?? null,
+        isOpen: s.isOpen,
+        closeDrawer: s.closeDrawer,
+      };
+    }),
   );
 
   return (
@@ -80,7 +93,7 @@ export function CartDrawer() {
               </div>
             ) : (
               <>
-                <div className="flex-1 overflow-y-auto px-5 divide-y divide-ink/8">
+                <div className="flex-1 overflow-y-auto divide-y divide-ink/8 px-5">
                   {items.map((item) => (
                     <CartItem
                       key={`${item.productId}-${item.variantId ?? "-"}`}
@@ -90,10 +103,13 @@ export function CartDrawer() {
                   ))}
                 </div>
                 <footer className="border-t border-ink/8 bg-white/60 px-5 pb-5">
-                  <CartSummary subtotal={subtotal} />
+                  <ShippingCalculator subtotal={subtotal} compact />
+                  <CartSummary subtotal={subtotal} shippingCost={shippingCost} />
                   <CheckoutActions
                     items={items}
                     subtotal={subtotal}
+                    shippingCost={shippingCost}
+                    shippingLabel={shippingLabel}
                     onAfterWhatsApp={closeDrawer}
                   />
                 </footer>

@@ -6,7 +6,7 @@ export const siteConfig = {
   url: process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
   currency: "ARS" as const,
   locale: "es-AR" as const,
-  whatsappNumber: process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ?? "5491100000000",
+  whatsappNumber: process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ?? "5493815456600",
   social: {
     instagram: "https://instagram.com/thedewedit.ar",
     instagramHandle: "@thedewedit.ar",
@@ -15,6 +15,10 @@ export const siteConfig = {
     installments: 3,
     cashDiscountPercent: 16.67,
     freeShippingThreshold: 35000,
+  },
+  shipping: {
+    defaultWeightKg: 0.5,
+    quoteExpiryMs: 10 * 60 * 1000,
   },
   contact: {
     email: "hola@thedewedit.ar",

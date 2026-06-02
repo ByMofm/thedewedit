@@ -5,6 +5,7 @@ import { createPreference } from "@/lib/mercadopago";
 interface PreferenceRequest {
   items: CartItem[];
   payer: OrderPayer;
+  shippingCost?: number;
 }
 
 export async function POST(request: Request) {
@@ -18,7 +19,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Datos de contacto incompletos." }, { status: 400 });
     }
 
-    const preference = await createPreference(body.items, body.payer);
+    const preference = await createPreference(body.items, body.payer, body.shippingCost);
 
     return NextResponse.json({
       id: preference.id,

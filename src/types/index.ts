@@ -55,6 +55,10 @@ export interface ProductVariant {
   stock?: number;
 }
 
+export type ProductSeed = Omit<Product, "stock"> & {
+  variants?: Omit<ProductVariant, "stock">[];
+};
+
 export interface CartItem {
   productId: string;
   slug: string;
@@ -74,3 +78,25 @@ export interface OrderPayer {
   city: string;
   zip: string;
 }
+
+export type ShippingServiceType = "domicilio" | "sucursal";
+
+export interface ShippingOption {
+  id: string;
+  name: string;
+  type: ShippingServiceType;
+  price: number;
+  diasHabiles: number;
+}
+
+export interface ShippingQuoteResult {
+  postalCode: string;
+  options: ShippingOption[];
+  fetchedAt: number;
+}
+
+export type ShippingQuoteState =
+  | { status: "idle" }
+  | { status: "loading"; postalCode: string }
+  | { status: "error"; postalCode: string; message: string; unavailable?: boolean }
+  | { status: "success"; result: ShippingQuoteResult; selectedId: string | null };

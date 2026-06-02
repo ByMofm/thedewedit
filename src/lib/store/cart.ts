@@ -2,11 +2,18 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { CartItem, Product, ProductVariant } from "@/types";
+import type {
+  CartItem,
+  Product,
+  ProductVariant,
+  ShippingQuoteResult,
+  ShippingQuoteState,
+} from "@/types";
 
 interface CartState {
   items: CartItem[];
   isOpen: boolean;
+  shipping: ShippingQuoteState;
   addItem: (product: Product, variant?: ProductVariant, quantity?: number) => void;
   removeItem: (productId: string, variantId?: string) => void;
   updateQuantity: (productId: string, quantity: number, variantId?: string) => void;
@@ -14,6 +21,11 @@ interface CartState {
   openDrawer: () => void;
   closeDrawer: () => void;
   toggleDrawer: () => void;
+  setShippingLoading: (postalCode: string) => void;
+  setShippingSuccess: (result: ShippingQuoteResult) => void;
+  setShippingError: (postalCode: string, message: string, unavailable?: boolean) => void;
+  selectShippingOption: (id: string) => void;
+  clearShipping: () => void;
 }
 
 const sameLine = (a: CartItem, productId: string, variantId?: string) =>
@@ -24,6 +36,7 @@ export const useCart = create<CartState>()(
     (set) => ({
       items: [],
       isOpen: false,
+      shipping: { status: "idle" },
 
       addItem: (product, variant, quantity = 1) =>
         set((state) => {
@@ -72,6 +85,29 @@ export const useCart = create<CartState>()(
       openDrawer: () => set({ isOpen: true }),
       closeDrawer: () => set({ isOpen: false }),
       toggleDrawer: () => set((s) => ({ isOpen: !s.isOpen })),
+
+      setShippingLoading: (postalCode) =>
+        set({ shipping: { status: "loading", postalCode } }),
+
+      setShippingSuccess: (result) =>
+        set({
+          shipping: {
+            status: "success",
+            result,
+            selectedId: result.options[0]?.id ?? null,
+          },
+        }),
+
+      setShippingError: (postalCode, message, unavailable) =>
+        set({ shipping: { status: "error", postalCode, message, unavailable } }),
+
+      selectShippingOption: (id) =>
+        set((state) => {
+          if (state.shipping.status !== "success") return {};
+          return { shipping: { ...state.shipping, selectedId: id } };
+        }),
+
+      clearShipping: () => set({ shipping: { status: "idle" } }),
     }),
     {
       name: "tde-cart",
@@ -85,3 +121,11 @@ export const selectSubtotal = (state: CartState) =>
 
 export const selectItemCount = (state: CartState) =>
   state.items.reduce((sum, i) => sum + i.quantity, 0);
+
+export const selectShippingCost = (state: CartState): number | null => {
+  const { shipping } = state;
+  if (shipping.status !== "success") return null;
+  const { selectedId, result } = shipping;
+  if (selectedId === null) return null;
+  return result.options.find((o) => o.id === selectedId)?.price ?? null;
+};
