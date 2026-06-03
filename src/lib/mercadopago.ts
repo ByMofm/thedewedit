@@ -1,4 +1,4 @@
-import { MercadoPagoConfig, Preference } from "mercadopago";
+import { MercadoPagoConfig, Payment, Preference } from "mercadopago";
 import type { CartItem, OrderPayer } from "@/types";
 import { siteConfig } from "@/config/site";
 
@@ -10,6 +10,12 @@ function getClient() {
     );
   }
   return new MercadoPagoConfig({ accessToken });
+}
+
+export async function getPayment(id: string) {
+  const client = getClient();
+  const payment = new Payment(client);
+  return payment.get({ id });
 }
 
 export async function createPreference(items: CartItem[], payer: OrderPayer, shippingCost?: number) {
