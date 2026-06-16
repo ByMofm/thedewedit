@@ -32,6 +32,9 @@ const STOCK_TAB_NAME = "Stock";
 // stock nuevo. Dejá SITE_URL vacío para desactivar el republish automático.
 const SITE_URL = ""; // ej. "https://thedewedit.ar" (sin barra final)
 const PUBLISH_SECRET = "CAMBIAR_POR_EL_MISMO_VALOR_QUE_PUBLISH_SECRET_EN_VERCEL";
+
+// Email opcional: te avisa de cada venta nueva. Vacío = sin email.
+const NOTIFY_EMAIL = "";
 // ──────────────────────────────────────────────────────────────────────────────
 
 const SHEET_NAME = "Órdenes";
@@ -106,15 +109,23 @@ function doPost(e) {
     ]);
     const orderRow = sheet.getLastRow();
 
-    // Descontar stock. Si algún ítem quedó en negativo (sobreventa), lo marcamos
-    // en la propia orden para que lo veas y puedas resolverlo (refund/contacto).
+    // Descontar stock y anotar en la orden cualquier problema, para que lo veas:
+    //  - oversold: se vendió más de lo que había (resolver: refund/contacto).
+    //  - error: el descuento no corrió (ej. STOCK_SHEET_ID/STOCK_TAB_NAME mal).
     var stockResult = decrementStock(order.items || []);
+    var notes = [];
     if (stockResult.oversold && stockResult.oversold.length > 0) {
-      var warn = " | ⚠️ FALTÓ STOCK: " + stockResult.oversold.join(", ");
+      notes.push("⚠️ FALTÓ STOCK: " + stockResult.oversold.join(", "));
+    }
+    if (stockResult.error) {
+      notes.push("⚠️ STOCK NO ACTUALIZADO (" + stockResult.error + ") — revisá STOCK_SHEET_ID / STOCK_TAB_NAME");
+    }
+    if (notes.length > 0) {
       var itemsCol = HEADERS.indexOf("items") + 1;
-      sheet.getRange(orderRow, itemsCol).setValue(itemsStr + warn);
+      sheet.getRange(orderRow, itemsCol).setValue(itemsStr + " | " + notes.join(" | "));
     }
 
+    notifyByEmail(order, itemsStr, notes);
     triggerRepublish();
 
     return jsonOut({ ok: true, stock: stockResult });
@@ -178,6 +189,24 @@ function decrementStock(items) {
   }
 
   return { updated: updated, oversold: oversold };
+}
+
+/** Envía un email de aviso de venta (si NOTIFY_EMAIL está configurado). */
+function notifyByEmail(order, itemsStr, notes) {
+  if (!NOTIFY_EMAIL) return;
+  try {
+    var subject = "🛍️ Nueva venta — $" + order.amount + " " + (order.currency || "");
+    var lines = [
+      "Pago: " + order.paymentId + " (" + order.status + ")",
+      "Cliente: " + (order.payerName || "-") + " · " + (order.payerEmail || "-") + " · " + (order.payerPhone || "-"),
+      "Envío: " + (order.shippingAddress || "-") + " (CP " + (order.shippingZip || "-") + ")",
+      "Items: " + itemsStr,
+    ];
+    if (notes && notes.length > 0) lines.push("", notes.join("\n"));
+    MailApp.sendEmail(NOTIFY_EMAIL, subject, lines.join("\n"));
+  } catch (err) {
+    // No interrumpir el flujo de la orden si el email falla.
+  }
 }
 
 /** Dispara un redeploy del sitio llamando a /api/publish. */
