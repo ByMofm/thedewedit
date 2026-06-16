@@ -591,6 +591,14 @@ async function main() {
         singleId: useSingle ? singleId : undefined,
       });
     } catch (e) {
+      // No romper el deploy si Google falla durante un Publicar: si ya hay
+      // archivos generados (último build bueno), seguimos con esos y avisamos.
+      // Mejor el sitio arriba con el catálogo anterior que un build caído.
+      if (existsSync(PRODUCTS_RAW_TS) && existsSync(STOCK_TS)) {
+        console.warn(`\nWARN: falló el sync desde Sheets (${e.message}).`);
+        console.warn("Usando el último products-raw.ts / stock.ts generado. Revisá el Sheet y volvé a publicar.");
+        process.exit(0);
+      }
       console.error(`\nERROR: ${e.message}`);
       process.exit(1);
     }

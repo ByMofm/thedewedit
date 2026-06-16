@@ -1,27 +1,7 @@
-export type CategorySlug =
-  | "makeup"
-  | "skincare"
-  | "brushes"
-  | "accesorios"
-  | "ojos"
-  | "labios"
-  | "mejillas"
-  | "rostro"
-  | "ojos-paletas"
-  | "ojos-mascara"
-  | "ojos-delineador"
-  | "ojos-cejas"
-  | "labios-tratamientos"
-  | "labios-liner"
-  | "labios-lips"
-  | "mejillas-contorno"
-  | "mejillas-base"
-  | "mejillas-blush"
-  | "mejillas-corrector"
-  | "mejillas-setting"
-  | "mejillas-iluminador"
-  | "rostro-setting-spray"
-  | "rostro-polvos";
+// Slug de categoría. Es `string` (no un union cerrado) a propósito: así se
+// pueden crear categorías nuevas desde el Sheet sin romper el build. Las que no
+// estén declaradas en categories.ts se auto-registran al vuelo (ver getCategory).
+export type CategorySlug = string;
 
 export interface Category {
   slug: CategorySlug;
