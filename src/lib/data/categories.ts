@@ -1,6 +1,7 @@
 import type { Category, CategorySlug } from "@/types";
+import { products } from "./products";
 
-export const categories: Category[] = [
+const baseCategories: Category[] = [
   // Top level
   {
     slug: "makeup",
@@ -56,6 +57,29 @@ export const categories: Category[] = [
   { slug: "rostro-setting-spray", name: "Setting Spray", parent: "rostro" },
   { slug: "rostro-polvos",        name: "Polvos",        parent: "rostro" },
 ];
+
+/** "perfumes-importados" → "Perfumes Importados". */
+function humanizeSlug(slug: string): string {
+  return slug
+    .split("-")
+    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+    .join(" ");
+}
+
+// Categorías declaradas + las que aparezcan en productos pero no estén declaradas
+// (se permite crear categorías nuevas desde el Sheet sin tocar código). Las
+// derivadas quedan como top-level con un nombre humanizado; podés refinar
+// nombre/parent/imagen agregándolas arriba si querés.
+const declaredSlugs = new Set(baseCategories.map((c) => c.slug));
+const derivedCategories: Category[] = [];
+for (const p of products) {
+  if (p.category && !declaredSlugs.has(p.category)) {
+    declaredSlugs.add(p.category);
+    derivedCategories.push({ slug: p.category, name: humanizeSlug(p.category) });
+  }
+}
+
+export const categories: Category[] = [...baseCategories, ...derivedCategories];
 
 export function getCategory(slug: string): Category | undefined {
   return categories.find((c) => c.slug === slug);

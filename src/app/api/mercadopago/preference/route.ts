@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { CartItem, OrderPayer } from "@/types";
 import { createPreference } from "@/lib/mercadopago";
+import { checkCartStock } from "@/lib/stock-live";
 
 interface PreferenceRequest {
   items: CartItem[];
@@ -17,6 +18,22 @@ export async function POST(request: Request) {
     }
     if (!body.payer?.email) {
       return NextResponse.json({ error: "Datos de contacto incompletos." }, { status: 400 });
+    }
+
+    // Re-chequeo de stock contra la planilla en vivo: bloquea la sobreventa
+    // aunque la página estática esté desactualizada.
+    const shortages = await checkCartStock(body.items);
+    if (shortages.length > 0) {
+      const detail = shortages
+        .map((s) => (s.available === 0 ? `${s.name} (sin stock)` : `${s.name} (quedan ${s.available})`))
+        .join(", ");
+      return NextResponse.json(
+        {
+          error: `Se actualizó el stock mientras comprabas: ${detail}. Ajustá tu carrito e intentá de nuevo.`,
+          shortages,
+        },
+        { status: 409 },
+      );
     }
 
     const preference = await createPreference(body.items, body.payer, body.shippingCost);
