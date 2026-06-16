@@ -56,6 +56,15 @@ const HEADERS = [
 ];
 
 function doPost(e) {
+  // Serializa webhooks concurrentes: evita que dos pagos pisen el read-modify-write
+  // del stock y garantiza idempotencia (dedup + append + descuento atómicos).
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(30000);
+  } catch (err) {
+    return jsonOut({ ok: false, error: "busy" });
+  }
+
   try {
     const body = JSON.parse(e.postData.contents);
     if (body.token !== ORDERS_TOKEN) {
@@ -87,32 +96,32 @@ function doPost(e) {
       })
       .join(" | ");
 
+    // Append PRIMERO (es el marcador de idempotencia). Si algo falla después,
+    // un reintento de MP se deduplica → preferimos descontar de menos que de más.
     sheet.appendRow([
-      order.paymentId,
-      order.createdAt,
-      order.approvedAt,
-      order.status,
-      order.statusDetail,
-      order.amount,
-      order.currency,
-      order.paymentMethod,
-      order.installments,
-      order.payerEmail,
-      order.payerName,
-      order.payerPhone,
-      order.shippingAddress,
-      order.shippingZip,
-      itemsStr,
-      order.preferenceId,
+      order.paymentId, order.createdAt, order.approvedAt, order.status,
+      order.statusDetail, order.amount, order.currency, order.paymentMethod,
+      order.installments, order.payerEmail, order.payerName, order.payerPhone,
+      order.shippingAddress, order.shippingZip, itemsStr, order.preferenceId,
     ]);
+    const orderRow = sheet.getLastRow();
 
-    // Orden nueva → descontar stock y republicar.
+    // Descontar stock. Si algún ítem quedó en negativo (sobreventa), lo marcamos
+    // en la propia orden para que lo veas y puedas resolverlo (refund/contacto).
     var stockResult = decrementStock(order.items || []);
+    if (stockResult.oversold && stockResult.oversold.length > 0) {
+      var warn = " | ⚠️ FALTÓ STOCK: " + stockResult.oversold.join(", ");
+      var itemsCol = HEADERS.indexOf("items") + 1;
+      sheet.getRange(orderRow, itemsCol).setValue(itemsStr + warn);
+    }
+
     triggerRepublish();
 
     return jsonOut({ ok: true, stock: stockResult });
   } catch (err) {
     return jsonOut({ ok: false, error: String(err) });
+  } finally {
+    lock.releaseLock();
   }
 }
 
@@ -149,6 +158,7 @@ function decrementStock(items) {
   }
 
   var updated = 0;
+  var oversold = [];
   for (var k = 0; k < items.length; k++) {
     var it = items[k];
     var id = String(it.id || "").trim();
@@ -158,12 +168,16 @@ function decrementStock(items) {
 
     var rowIdx = rowByKey[id];
     var current = Number(values[rowIdx][iStock]) || 0;
+    if (current < qty) {
+      // Se vendió más de lo que había: dejamos en 0 pero lo reportamos.
+      oversold.push(id + " (había " + current + ", se pidió " + qty + ")");
+    }
     var next = Math.max(0, current - qty);
     sheet.getRange(rowIdx + 1, iStock + 1).setValue(next);
     updated++;
   }
 
-  return { updated: updated };
+  return { updated: updated, oversold: oversold };
 }
 
 /** Dispara un redeploy del sitio llamando a /api/publish. */

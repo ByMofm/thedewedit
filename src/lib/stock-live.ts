@@ -14,14 +14,6 @@ import { stockMap as staticStockMap } from "@/lib/data/stock";
  * (mejor un dato viejo que bloquear todas las compras por un error transitorio).
  */
 
-const CACHE_TTL_MS = 45 * 1000;
-
-interface Cache {
-  map: Record<string, number>;
-  fetchedAt: number;
-}
-let cache: Cache | null = null;
-
 /** Misma clave que `stockMap`: `productId` o `productId::variantId`. */
 function stockKey(productId: string, variantId?: string): string {
   return variantId ? `${productId}::${variantId}` : productId;
@@ -93,13 +85,11 @@ function rowsToStockMap(rows: string[][]): Record<string, number> {
 }
 
 /**
- * Stock actual por SKU. Devuelve el mapa en vivo del Sheet (cacheado ~45s) o,
- * si no hay Sheets / falla la consulta, el `stockMap` estático del build.
+ * Stock actual por SKU. Lee el Sheet EN VIVO (sin caché: es un chequeo de
+ * sobreventa y el checkout es de bajo volumen) o, si no hay Sheets / falla la
+ * consulta, devuelve el `stockMap` estático del build.
  */
 export async function getLiveStock(): Promise<Record<string, number>> {
-  if (cache && Date.now() - cache.fetchedAt < CACHE_TTL_MS) {
-    return cache.map;
-  }
   const url = stockSheetCsvUrl();
   if (!url) return staticStockMap;
 
@@ -109,9 +99,7 @@ export async function getLiveStock(): Promise<Record<string, number>> {
     const text = await res.text();
     if (text.trimStart().startsWith("<")) return staticStockMap; // página de error de Google
     const map = rowsToStockMap(parseCsv(text));
-    if (Object.keys(map).length === 0) return staticStockMap;
-    cache = { map, fetchedAt: Date.now() };
-    return map;
+    return Object.keys(map).length === 0 ? staticStockMap : map;
   } catch {
     return staticStockMap;
   }
