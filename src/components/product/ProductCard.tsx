@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { ShoppingBag } from "lucide-react";
@@ -12,6 +13,11 @@ import { toast } from "@/components/ui/Toast";
 import { percentOff } from "@/lib/formatters";
 import { getRating } from "@/lib/ratings";
 
+// Imagen genérica de respaldo: si el producto tiene una sola foto, se usa como
+// "segunda" para que el efecto de hover (cambio de imagen) igual funcione.
+const HOVER_FALLBACK =
+  "https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=1000&q=80";
+
 interface ProductCardProps {
   product: Product;
 }
@@ -23,6 +29,23 @@ export function ProductCard({ product }: ProductCardProps) {
   const off = hasDiscount ? percentOff(product.price, product.compareAtPrice!) : 0;
   const hasVariants = (product.variants?.length ?? 0) > 0;
   const rating = getRating(product.id);
+
+  // Galería de hover: todas las imágenes del producto; si tiene una sola, se
+  // agrega la genérica para que el cambio en hover tenga a dónde ir.
+  const images = product.images.length > 1 ? product.images : [product.images[0] ?? HOVER_FALLBACK, HOVER_FALLBACK];
+  const [idx, setIdx] = useState(0);
+  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const startCycle = () => {
+    if (images.length < 2 || timer.current) return;
+    timer.current = setInterval(() => setIdx((i) => (i + 1) % images.length), 750);
+  };
+  const stopCycle = () => {
+    if (timer.current) clearInterval(timer.current);
+    timer.current = null;
+    setIdx(0);
+  };
+  useEffect(() => () => { if (timer.current) clearInterval(timer.current); }, []);
 
   const handleAdd = () => {
     if (hasVariants) return;
@@ -40,26 +63,22 @@ export function ProductCard({ product }: ProductCardProps) {
     >
       <Link
         href={`/productos/${product.slug}`}
+        onMouseEnter={startCycle}
+        onMouseLeave={stopCycle}
         className="relative block overflow-hidden rounded-[var(--radius-lg)] bg-cream"
       >
-        <div className="relative aspect-[4/5]">
-          <Image
-            src={product.images[0]}
-            alt={product.name}
-            fill
-            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-            className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.04]"
-          />
-          {product.images[1] && (
+        <div className="relative aspect-[4/5] transition-transform duration-500 ease-out group-hover:scale-[1.04]">
+          {images.map((src, i) => (
             <Image
-              src={product.images[1]}
-              alt=""
-              aria-hidden
+              key={`${src}-${i}`}
+              src={src}
+              alt={i === 0 ? product.name : ""}
+              aria-hidden={i !== 0}
               fill
               sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-              className="object-cover opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+              className={`object-cover transition-opacity duration-300 ${i === idx ? "opacity-100" : "opacity-0"}`}
             />
-          )}
+          ))}
         </div>
 
         {hasDiscount && (

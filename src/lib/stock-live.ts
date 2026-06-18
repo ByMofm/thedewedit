@@ -19,17 +19,11 @@ function stockKey(productId: string, variantId?: string): string {
   return variantId ? `${productId}::${variantId}` : productId;
 }
 
-/** URL gviz-CSV de la planilla de Stock, según el modo configurado. */
-function stockSheetCsvUrl(): string | null {
-  const stockId = process.env.SHEETS_STOCK_ID;
-  if (stockId) {
-    return `https://docs.google.com/spreadsheets/d/${stockId}/gviz/tq?tqx=out:csv`;
-  }
-  const singleId = process.env.SHEETS_ID;
-  if (singleId) {
-    return `https://docs.google.com/spreadsheets/d/${singleId}/gviz/tq?tqx=out:csv&sheet=Stock`;
-  }
-  return null;
+/** URL gviz-CSV de una pestaña del Sheet único (caja negra). */
+function tabCsvUrl(tab: string): string | null {
+  const id = process.env.SHEETS_ID;
+  if (!id) return null;
+  return `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab)}`;
 }
 
 // Parser CSV mínimo con soporte de comillas (el output de gviz entrecomilla cada campo).
@@ -64,45 +58,72 @@ function parseCsv(text: string): string[][] {
   return rows;
 }
 
-function rowsToStockMap(rows: string[][]): Record<string, number> {
-  if (rows.length < 2) return {};
-  const header = rows[0].map((h) => h.trim());
-  const iProduct = header.indexOf("productId");
-  const iVariant = header.indexOf("variantId");
-  const iStock = header.indexOf("stock");
-  if (iProduct === -1 || iStock === -1) return {};
+/** Índice de una columna por nombre en la fila de header. */
+function col(rows: string[][], name: string): { header: string[]; i: number } {
+  const header = (rows[0] ?? []).map((h) => h.trim());
+  return { header, i: header.indexOf(name) };
+}
 
-  const map: Record<string, number> = {};
-  for (const row of rows.slice(1)) {
-    const productId = (row[iProduct] ?? "").trim();
-    if (!productId) continue;
-    const variantId = iVariant >= 0 ? (row[iVariant] ?? "").trim() : "";
-    const stock = Number((row[iStock] ?? "").trim());
-    if (!Number.isFinite(stock)) continue;
-    map[stockKey(productId, variantId || undefined)] = stock;
+/** Descarga y parsea una pestaña; null si no hay Sheet, falla o es página de error. */
+async function fetchTab(tab: string): Promise<string[][] | null> {
+  const url = tabCsvUrl(tab);
+  if (!url) return null;
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) return null;
+    const text = await res.text();
+    if (text.trimStart().startsWith("<")) return null; // página de error de Google
+    return parseCsv(text);
+  } catch {
+    return null;
   }
-  return map;
 }
 
 /**
- * Stock actual por SKU. Lee el Sheet EN VIVO (sin caché: es un chequeo de
- * sobreventa y el checkout es de bajo volumen) o, si no hay Sheets / falla la
- * consulta, devuelve el `stockMap` estático del build.
+ * Stock actual por SKU, leído EN VIVO del Sheet (sin caché: es un chequeo de
+ * sobreventa y el checkout es de bajo volumen). El stock vive en la fila del
+ * dato: `Productos.stock` para productos simples y `Variantes.stock` por
+ * variante. Si no hay Sheet configurado o falla la consulta, cae al `stockMap`
+ * estático del build (mejor un dato viejo que bloquear todas las compras).
  */
 export async function getLiveStock(): Promise<Record<string, number>> {
-  const url = stockSheetCsvUrl();
-  if (!url) return staticStockMap;
+  const [productos, variantes] = await Promise.all([fetchTab("Productos"), fetchTab("Variantes")]);
+  if (!productos) return staticStockMap;
 
-  try {
-    const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) return staticStockMap;
-    const text = await res.text();
-    if (text.trimStart().startsWith("<")) return staticStockMap; // página de error de Google
-    const map = rowsToStockMap(parseCsv(text));
-    return Object.keys(map).length === 0 ? staticStockMap : map;
-  } catch {
-    return staticStockMap;
+  const map: Record<string, number> = {};
+  const hasVariants = new Set<string>();
+
+  // Variantes primero: definen el stock de los productos con variantes.
+  if (variantes && variantes.length >= 2) {
+    const { i: iP } = col(variantes, "productId");
+    const { i: iV } = col(variantes, "variantId");
+    const { i: iS } = col(variantes, "stock");
+    if (iP >= 0 && iV >= 0 && iS >= 0) {
+      for (const row of variantes.slice(1)) {
+        const pid = (row[iP] ?? "").trim();
+        const vid = (row[iV] ?? "").trim();
+        const stock = Number((row[iS] ?? "").trim());
+        if (!pid || !vid || !Number.isFinite(stock)) continue;
+        map[stockKey(pid, vid)] = stock;
+        hasVariants.add(pid);
+      }
+    }
   }
+
+  // Productos: stock a nivel producto, solo para los que NO tienen variantes.
+  const { i: iP } = col(productos, "productId");
+  const { i: iS } = col(productos, "stock");
+  if (iP >= 0 && iS >= 0) {
+    for (const row of productos.slice(1)) {
+      const pid = (row[iP] ?? "").trim();
+      if (!pid || hasVariants.has(pid)) continue;
+      const stock = Number((row[iS] ?? "").trim());
+      if (!Number.isFinite(stock)) continue;
+      map[stockKey(pid)] = stock;
+    }
+  }
+
+  return Object.keys(map).length === 0 ? staticStockMap : map;
 }
 
 export interface StockShortage {
