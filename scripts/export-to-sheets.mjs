@@ -1,18 +1,18 @@
 // scripts/export-to-sheets.mjs
 //
-// Exporta los datos actuales de products-raw.ts y data/stock.csv a 3 archivos CSV
-// listos para importar en Google Sheets:
+// Exporta los datos actuales (products-raw.ts + stock.ts) a 2 CSV listos para
+// importar en el Google Sheet único (caja negra), con el stock ya embebido en
+// la fila:
 //
-//   data/sheets-export-productos.csv  → pestaña "Productos"
-//   data/sheets-export-variantes.csv  → pestaña "Variantes"
-//   data/sheets-export-stock.csv      → pestaña "Stock"
+//   data/sheets-export-productos.csv  → pestaña "Productos"  (stock en la fila)
+//   data/sheets-export-variantes.csv  → pestaña "Variantes"  (stock por variante)
 //
 // Uso: node scripts/export-to-sheets.mjs
 //
 // Después de importar en Google Sheets:
 //   1. Configurar SHEETS_ID en .env.local y en Vercel
 //   2. Correr: pnpm sheets:sync
-//   3. Verificar que los archivos generados son iguales a los anteriores
+//   3. Verificar que products-raw.ts / stock.ts quedan iguales (solo cambia el comentario de origen)
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
@@ -20,10 +20,19 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const PRODUCTS_RAW_TS = resolve(ROOT, "src/lib/data/products-raw.ts");
-const CSV_PATH = resolve(ROOT, "data/stock.csv");
+const STOCK_TS = resolve(ROOT, "src/lib/data/stock.ts");
 const OUT_PRODUCTOS = resolve(ROOT, "data/sheets-export-productos.csv");
 const OUT_VARIANTES = resolve(ROOT, "data/sheets-export-variantes.csv");
-const OUT_STOCK = resolve(ROOT, "data/sheets-export-stock.csv");
+
+// stockMap desde stock.ts (fuente actual de stock). Claves: "id" o "id::variantId".
+function readStockMap() {
+  const src = readFileSync(STOCK_TS, "utf8");
+  const map = {};
+  const re = /"([^"]+)":\s*(\d+)/g;
+  let m;
+  while ((m = re.exec(src)) !== null) map[m[1]] = Number(m[2]);
+  return map;
+}
 
 // ── Escape para CSV (RFC 4180) ───────────────────────────────────────────────
 
@@ -203,23 +212,6 @@ function parseProductFull(blob) {
   };
 }
 
-// ── Parser del CSV de stock local ────────────────────────────────────────────
-
-function parseStockCsv(content) {
-  const lines = content.split(/\r?\n/);
-  const rows = [];
-  let header = null;
-  for (const raw of lines) {
-    const line = raw.trim();
-    if (!line || line.startsWith("#")) continue;
-    const cols = line.split(",").map((c) => c.trim());
-    if (!header) { header = cols; continue; }
-    if (cols.length < 2) continue;
-    // CSV format: productId,stock,variant
-    rows.push({ productId: cols[0], stock: cols[1], variantId: cols[2] || "" });
-  }
-  return rows;
-}
 
 // ── Main ─────────────────────────────────────────────────────────────────────
 
@@ -227,70 +219,47 @@ function main() {
   const source = readFileSync(PRODUCTS_RAW_TS, "utf8");
   const blobs = extractProductBlobs(source);
   const products = blobs.map(parseProductFull).filter((p) => p.productId);
+  const stockMap = readStockMap();
 
-  // ── Productos CSV ──
+  // ── Productos CSV (stock embebido para productos sin variantes) ──
   const productosHeader = csvRow(
-    "productId", "slug", "nombre", "marca", "categoria",
+    "productId", "nombre", "marca", "categoria",
     "precio", "precio_tachado", "descripcion_corta", "descripcion",
-    "imagenes", "destacado", "tags",
+    "imagenes", "destacado", "tags", "stock",
   );
-  const productosRows = products.map((p) =>
-    csvRow(
-      p.productId, p.slug, p.nombre, p.marca, p.categoria,
+  const productosRows = products.map((p) => {
+    const stock = p.variants.length === 0 ? (stockMap[p.productId] ?? 0) : ""; // con variantes: stock por variante
+    return csvRow(
+      p.productId, p.nombre, p.marca, p.categoria,
       p.precio, p.precio_tachado, p.descripcion_corta, p.descripcion,
-      p.imagenes, p.destacado, p.tags,
-    ),
-  );
+      p.imagenes, p.destacado, p.tags, stock,
+    );
+  });
   writeFileSync(OUT_PRODUCTOS, [productosHeader, ...productosRows].join("\n") + "\n");
   console.log(`OK: ${OUT_PRODUCTOS} — ${products.length} productos`);
 
-  // ── Variantes CSV ──
-  const variantesHeader = csvRow("productId", "variantId", "nombre_variante", "precio_variante");
+  // ── Variantes CSV (stock por variante) ──
+  const variantesHeader = csvRow("productId", "variantId", "nombre_variante", "precio_variante", "stock");
   const variantesRows = [];
   for (const p of products) {
     for (const v of p.variants) {
-      variantesRows.push(csvRow(p.productId, v.id, v.name, v.price ?? ""));
+      const stock = stockMap[`${p.productId}::${v.id}`] ?? 0;
+      variantesRows.push(csvRow(p.productId, v.id, v.name, v.price ?? "", stock));
     }
   }
   writeFileSync(OUT_VARIANTES, [variantesHeader, ...variantesRows].join("\n") + "\n");
   console.log(`OK: ${OUT_VARIANTES} — ${variantesRows.length} variantes`);
 
-  // ── Stock CSV (from existing stock.csv, converted to new format) ──
-  const stockHeader = csvRow("productId", "variantId", "stock");
-  let stockRows = [];
-  try {
-    const csvContent = readFileSync(CSV_PATH, "utf8");
-    stockRows = parseStockCsv(csvContent).map((r) =>
-      csvRow(r.productId, r.variantId, r.stock),
-    );
-    console.log(`OK: ${OUT_STOCK} — ${stockRows.length} entradas (desde data/stock.csv)`);
-  } catch {
-    console.warn(`WARN: no se encontró data/stock.csv — generando stock.csv vacío`);
-    // Generate empty rows with 0 stock for each product/variant
-    for (const p of products) {
-      if (p.variants.length === 0) {
-        stockRows.push(csvRow(p.productId, "", "0"));
-      } else {
-        for (const v of p.variants) {
-          stockRows.push(csvRow(p.productId, v.id, "0"));
-        }
-      }
-    }
-  }
-  writeFileSync(OUT_STOCK, [stockHeader, ...stockRows].join("\n") + "\n");
-
   console.log(`
 Listo. Pasos siguientes:
-  1. Abrí Google Sheets y creá un Spreadsheet nuevo
-  2. Creá 3 pestañas: "Productos", "Variantes", "Stock"
-  3. En cada pestaña: Archivo → Importar → seleccioná el CSV correspondiente
+  1. Creá 1 Google Sheet nuevo con 3 pestañas: "Productos", "Variantes", "Órdenes"
+  2. En "Productos" y "Variantes": Archivo → Importar → reemplazar hoja con el CSV:
        - Productos:  data/sheets-export-productos.csv
        - Variantes:  data/sheets-export-variantes.csv
-       - Stock:      data/sheets-export-stock.csv
-  4. Copiá el ID del Sheet desde la URL (la parte entre /d/ y /edit)
-  5. Agregá SHEETS_ID=<el-id> a tu .env.local
-  6. Corré: pnpm sheets:sync
-  7. Verificá que el sitio sigue funcionando igual
+     ("Órdenes" se deja vacía; la llena el webhook de ventas)
+  3. Copiá el ID del Sheet desde la URL (la parte entre /d/ y /edit)
+  4. Agregá SHEETS_ID=<el-id> a tu .env.local y a Vercel
+  5. Corré: pnpm sheets:sync  → products-raw.ts / stock.ts deben quedar iguales
 `);
 }
 

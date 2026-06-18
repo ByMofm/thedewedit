@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getPayment } from "@/lib/mercadopago";
-import { forwardOrderToSheets, verifyMpSignature, type OrderRecord } from "@/lib/orders";
+import { persistOrder, verifyMpSignature, type OrderRecord } from "@/lib/orders";
+import { triggerRedeploy } from "@/lib/redeploy";
 
 interface MpNotification {
   type?: string;
@@ -123,9 +124,18 @@ export async function POST(request: Request) {
     });
 
     if (order.status === "approved") {
-      const result = await forwardOrderToSheets(order);
+      const result = await persistOrder(order);
       if (!result.ok) {
-        console.warn("[mp/webhook] forward to sheets failed", { reason: result.reason });
+        console.warn("[mp/webhook] persist order failed", { reason: result.reason });
+      } else if (result.duplicate) {
+        console.log("[mp/webhook] duplicate payment, ignored", { paymentId: order.paymentId });
+      } else {
+        if (result.oversold?.length) {
+          console.warn("[mp/webhook] OVERSOLD", { paymentId: order.paymentId, oversold: result.oversold });
+        }
+        // Stock cambió → republicar para que el catálogo estático lo refleje.
+        const redeploy = await triggerRedeploy();
+        if (!redeploy.ok) console.warn("[mp/webhook] redeploy failed", { error: redeploy.error });
       }
     }
 

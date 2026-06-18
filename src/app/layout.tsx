@@ -1,9 +1,5 @@
 import type { Metadata } from "next";
 import { Fraunces, Inter } from "next/font/google";
-import { AnnouncementBar } from "@/components/layout/AnnouncementBar";
-import { Navbar } from "@/components/layout/Navbar";
-import { Footer } from "@/components/layout/Footer";
-import { CartDrawer } from "@/components/cart/CartDrawer";
 import { ToastHost } from "@/components/ui/Toast";
 import { siteConfig } from "@/config/site";
 import "./globals.css";
@@ -48,11 +44,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es-AR" className={`${fraunces.variable} ${inter.variable}`}>
       <body className="min-h-dvh bg-cream-soft text-ink antialiased">
-        <AnnouncementBar />
-        <Navbar />
-        <main>{children}</main>
-        <Footer />
-        <CartDrawer />
+        {children}
         <ToastHost />
       </body>
     </html>
