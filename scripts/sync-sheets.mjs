@@ -304,13 +304,6 @@ async function syncFromSheets(sheetsId) {
 }
 
 function syncFromLocalCsv() {
-  if (!existsSync(LOCAL_PRODUCTOS)) {
-    console.error(
-      `ERROR: sin SHEETS_ID y falta ${LOCAL_PRODUCTOS}.\n` +
-        `Generá los CSV con 'pnpm sheets:export' o configurá SHEETS_ID.`,
-    );
-    process.exit(1);
-  }
   const productos = rowsToObjects(parseCsvRfc4180(readFileSync(LOCAL_PRODUCTOS, "utf8")));
   const variantes = existsSync(LOCAL_VARIANTES)
     ? rowsToObjects(parseCsvRfc4180(readFileSync(LOCAL_VARIANTES, "utf8")))
@@ -338,8 +331,19 @@ async function main() {
       console.error(`\nERROR: ${e.message}`);
       process.exit(1);
     }
-  } else {
+  } else if (existsSync(LOCAL_PRODUCTOS)) {
     syncFromLocalCsv();
+  } else if (existsSync(PRODUCTS_RAW_TS) && existsSync(STOCK_TS)) {
+    // Sin SHEETS_ID ni CSV local: usamos el snapshot ya generado (ej. build local
+    // sin env, o repo recién clonado). La verdad sigue siendo el Sheet en prod.
+    console.log("INFO: sin SHEETS_ID ni CSV local — usando products-raw.ts / stock.ts ya generados.");
+    process.exit(0);
+  } else {
+    console.error(
+      "ERROR: sin SHEETS_ID, sin CSV local y sin archivos generados.\n" +
+        "Configurá SHEETS_ID o generá los CSV con 'pnpm sheets:export'.",
+    );
+    process.exit(1);
   }
 }
 
