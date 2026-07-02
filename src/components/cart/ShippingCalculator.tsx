@@ -47,7 +47,11 @@ function OptionCard({ option, selected, onSelect, compact }: OptionCardProps) {
             <p className="text-[12px] font-medium text-ink">
               {option.type === "domicilio" ? "Envío a domicilio" : "Retiro en sucursal"}
             </p>
-            <p className="text-[11px] text-ink-soft">{option.diasHabiles} días hábiles</p>
+            <p className="text-[11px] text-ink-soft">
+              {option.diasHabiles > 0
+                ? `${option.diasHabiles} días hábiles`
+                : `Andreani ${option.name}`}
+            </p>
           </div>
         </div>
         <span className="shrink-0 text-[13px] font-semibold tabular-nums text-ink">
