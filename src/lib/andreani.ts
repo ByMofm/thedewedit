@@ -1,5 +1,15 @@
 import type { ShippingOption } from "@/types";
 
+// API PyME de Andreani (el mismo que consume el plugin oficial de WooCommerce).
+// El "Credencial ID" se genera en https://pymes.andreani.com/integraciones/ (opción WooCommerce)
+// y funciona como bearer contra este host: NO requiere el API de developers (apis.andreani.com).
+const API_BASE = "https://woocommerce-api-acom.andreani.com";
+const LOGIN_URL = `${API_BASE}/api/v1/Login`;
+const RATES_URL = `${API_BASE}/api/v1/Pyme/rates`;
+
+// ponytail: caja por defecto en cm; subir a config/producto si algún día cotiza mal por volumen.
+const DEFAULT_BOX = { width: 20, height: 15, depth: 10 };
+
 export class AndreaniUnavailableError extends Error {
   constructor(public readonly reason: "no_credentials" | "auth_failed" | "api_error") {
     super(reason);
@@ -16,10 +26,8 @@ let tokenCache: TokenCache | null = null;
 const TOKEN_TTL_MS = 55 * 60 * 1000;
 
 async function getAuthToken(): Promise<string> {
-  const usuario = process.env.ANDREANI_USUARIO;
-  const clave = process.env.ANDREANI_CLAVE;
-
-  if (!usuario || !clave || !process.env.ANDREANI_CONTRATO) {
+  const credencial = process.env.ANDREANI_CREDENCIAL_ID;
+  if (!credencial || !process.env.ANDREANI_CP_ORIGEN) {
     throw new AndreaniUnavailableError("no_credentials");
   }
 
@@ -27,29 +35,29 @@ async function getAuthToken(): Promise<string> {
     return tokenCache.token;
   }
 
-  const res = await fetch("https://apis.andreani.com/login", {
+  const res = await fetch(LOGIN_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ usuario, clave }),
+    headers: { Authorization: credencial, "Content-Type": "application/json" },
   });
 
   if (!res.ok) {
     throw new AndreaniUnavailableError("auth_failed");
   }
 
-  const data = (await res.json()) as { token?: string };
-  if (!data.token) {
+  const data = (await res.json()) as { response?: { accessToken?: string } };
+  const token = data.response?.accessToken;
+  if (!token) {
     throw new AndreaniUnavailableError("auth_failed");
   }
 
-  tokenCache = { token: data.token, expiresAt: Date.now() + TOKEN_TTL_MS };
-  return data.token;
+  tokenCache = { token, expiresAt: Date.now() + TOKEN_TTL_MS };
+  return token;
 }
 
-interface RawAndreaniOption {
-  nombre: string;
-  precio: number;
-  diasHabiles: number;
+interface RawRate {
+  code: string;
+  total: number;
+  diasHabiles?: number;
 }
 
 function slugify(str: string): string {
@@ -61,19 +69,19 @@ function slugify(str: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
-function parseOption(raw: RawAndreaniOption): ShippingOption | null {
-  const nombre = raw.nombre.toUpperCase();
-  let type: ShippingOption["type"] | null = null;
-  if (nombre.includes("DOMICILIO")) type = "domicilio";
-  else if (nombre.includes("SUCURSAL")) type = "sucursal";
-  else return null;
+function parseRate(raw: RawRate): ShippingOption {
+  // Los code reales son "estándar", "sucursal", "llega hoy", "bigger":
+  // solo "sucursal" es retiro en sucursal; el resto es entrega a domicilio.
+  const type: ShippingOption["type"] = raw.code.toUpperCase().includes("SUCURSAL")
+    ? "sucursal"
+    : "domicilio";
 
   return {
-    id: slugify(raw.nombre),
-    name: raw.nombre,
+    id: slugify(raw.code),
+    name: raw.code,
     type,
-    price: raw.precio,
-    diasHabiles: raw.diasHabiles,
+    price: raw.total,
+    diasHabiles: raw.diasHabiles ?? 0,
   };
 }
 
@@ -83,27 +91,41 @@ export async function getShippingQuote(
   declaredValue: number,
 ): Promise<ShippingOption[]> {
   const token = await getAuthToken();
-  const contrato = process.env.ANDREANI_CONTRATO!;
 
-  const url = new URL("https://apis.andreani.com/v2/tarifas");
-  url.searchParams.set("cpDestino", postalCode);
-  url.searchParams.set("pesoBruto", String(weightKg));
-  url.searchParams.set("contrato", contrato);
-  url.searchParams.set("valorDeclarado", String(declaredValue));
+  const body = {
+    postal_code_origin: process.env.ANDREANI_CP_ORIGEN,
+    postal_code_destination: postalCode,
+    products: [
+      {
+        quantity: 1,
+        price: Math.round(declaredValue),
+        dimensions: { ...DEFAULT_BOX, grams: Math.max(1, Math.round(weightKg * 1000)) },
+      },
+    ],
+  };
 
-  const res = await fetch(url.toString(), {
-    headers: { Authorization: `Bearer ${token}` },
+  const res = await fetch(RATES_URL, {
+    method: "POST",
+    headers: { "X-Auth-Token": token, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {
     throw new AndreaniUnavailableError("api_error");
   }
 
-  const raw = (await res.json()) as RawAndreaniOption[];
-  const options = raw.flatMap((r) => {
-    const parsed = parseOption(r);
-    return parsed ? [parsed] : [];
-  });
+  const data = (await res.json()) as { response?: { rates?: RawRate[] } };
+  const rates = data.response?.rates ?? [];
+
+  // El API repite "sucursal" por cada punto de retiro (mismo precio, distinta reference):
+  // dedupe por id quedándonos con la más barata.
+  const byId = new Map<string, ShippingOption>();
+  for (const raw of rates) {
+    const opt = parseRate(raw);
+    const prev = byId.get(opt.id);
+    if (!prev || opt.price < prev.price) byId.set(opt.id, opt);
+  }
+  const options = [...byId.values()];
 
   return options.sort((a, b) => {
     if (a.type !== b.type) return a.type === "domicilio" ? -1 : 1;
