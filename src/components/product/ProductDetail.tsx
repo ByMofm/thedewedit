@@ -11,6 +11,8 @@ import { ProductGallery } from "./ProductGallery";
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/components/ui/Toast";
 import { buildOrderMessage, getWhatsAppUrl } from "@/lib/whatsapp";
+import { siteConfig } from "@/config/site";
+import { formatARS } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 import { getCategory } from "@/lib/data/categories";
 
@@ -212,8 +214,18 @@ export function ProductDetail({ product }: ProductDetailProps) {
             <div className="flex items-start gap-2.5">
               <Truck className="mt-0.5 size-3.5 flex-shrink-0 text-lavender-deep" />
               <p>
-                <span className="font-medium text-ink">Envío gratis</span> en compras superiores a
-                $35.000. Entrega en 24–72hs hábiles.
+                {siteConfig.payments.freeShippingThreshold > 0 ? (
+                  <>
+                    <span className="font-medium text-ink">Envío gratis</span> en compras
+                    superiores a {formatARS(siteConfig.payments.freeShippingThreshold)}.{" "}
+                  </>
+                ) : (
+                  <>
+                    <span className="font-medium text-ink">Envíos a todo el país</span> con
+                    Andreani.{" "}
+                  </>
+                )}
+                Entrega en 24–72hs hábiles.
               </p>
             </div>
             <div className="mt-2.5 flex items-start gap-2.5">

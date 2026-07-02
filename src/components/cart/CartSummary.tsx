@@ -8,7 +8,7 @@ interface CartSummaryProps {
 
 export function CartSummary({ subtotal, shippingCost }: CartSummaryProps) {
   const threshold = siteConfig.payments.freeShippingThreshold;
-  const shippingFree = subtotal >= threshold;
+  const shippingFree = threshold > 0 && subtotal >= threshold;
   const remaining = Math.max(0, threshold - subtotal);
   const total = subtotal + (shippingCost ?? 0);
   const cash = cashPrice(total);
