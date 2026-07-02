@@ -14,7 +14,9 @@ export const siteConfig = {
   payments: {
     installments: 3,
     cashDiscountPercent: 16.67,
-    freeShippingThreshold: 35000,
+    // 0 (o var ausente) = envío gratis DESACTIVADO: siempre se cobra envío.
+    // Para reactivar: NEXT_PUBLIC_FREE_SHIPPING_THRESHOLD=35000 (y redeploy).
+    freeShippingThreshold: Number(process.env.NEXT_PUBLIC_FREE_SHIPPING_THRESHOLD ?? 0),
   },
   shipping: {
     defaultWeightKg: 0.5,

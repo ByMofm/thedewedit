@@ -2,11 +2,17 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import * as React from "react";
+import { siteConfig } from "@/config/site";
+import { formatARS } from "@/lib/formatters";
+
+const freeShippingThreshold = siteConfig.payments.freeShippingThreshold;
 
 const messages = [
   "🤍 3 cuotas sin interés con tarjetas bancarizadas",
   "✨ 20% OFF pagando en efectivo o transferencia",
-  "🚚 Envío gratis en compras superiores a $35.000",
+  ...(freeShippingThreshold > 0
+    ? [`🚚 Envío gratis en compras superiores a ${formatARS(freeShippingThreshold)}`]
+    : []),
   "🌿 Envíos a todo el país",
 ];
 

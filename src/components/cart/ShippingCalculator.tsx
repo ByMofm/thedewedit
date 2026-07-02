@@ -132,7 +132,7 @@ export function ShippingCalculator({ subtotal, compact = false }: ShippingCalcul
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shipping.status]);
 
-  if (subtotal >= threshold) return null;
+  if (threshold > 0 && subtotal >= threshold) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

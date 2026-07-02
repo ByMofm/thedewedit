@@ -1,4 +1,8 @@
 import { CreditCard, Sparkles, Truck, RefreshCcw } from "lucide-react";
+import { siteConfig } from "@/config/site";
+import { formatARS } from "@/lib/formatters";
+
+const freeShippingThreshold = siteConfig.payments.freeShippingThreshold;
 
 const benefits = [
   {
@@ -11,11 +15,17 @@ const benefits = [
     title: "20% OFF en efectivo",
     description: "Transferencia o depósito",
   },
-  {
-    icon: Truck,
-    title: "Envío gratis",
-    description: "En compras +$35.000",
-  },
+  freeShippingThreshold > 0
+    ? {
+        icon: Truck,
+        title: "Envío gratis",
+        description: `En compras +${formatARS(freeShippingThreshold)}`,
+      }
+    : {
+        icon: Truck,
+        title: "Envíos a todo el país",
+        description: "Con Andreani",
+      },
   {
     icon: RefreshCcw,
     title: "Cambios sin vueltas",
